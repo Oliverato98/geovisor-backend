@@ -1,0 +1,25 @@
+# Entorno
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Uploads (archivos subidos por usuarios)
+uploads/*
+!uploads/.gitkeep
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

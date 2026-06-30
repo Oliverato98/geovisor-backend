@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: geovisor_db
+    environment:
+      POSTGRES_DB: geovisor
+      POSTGRES_USER: geovisor_user
+      POSTGRES_PASSWORD: geovisor_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geovisor_user -d geovisor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: geovisor_redis
+    ports:
+      - "6380:6379"
+
+  api:
+    build: .
+    container_name: geovisor_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  martin:
+    image: maplibre/martin:latest
+    container_name: geovisor_martin
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://geovisor_user:geovisor_pass@db:5432/geovisor
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
