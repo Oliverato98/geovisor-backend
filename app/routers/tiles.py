@@ -2,13 +2,16 @@
 routers/tiles.py — Proxy de tiles desde Martin con CORS habilitado.
 Esto resuelve el problema de CORS al servir los tiles a través del backend.
 """
+import os
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
 
-MARTIN_INTERNAL_URL = "http://martin:3000"
+# En Railway el host interno se arma con MARTIN_HOST inyectado vía variable de entorno.
+# En Docker local, el nombre del servicio es "martin" en el puerto 3000.
+MARTIN_INTERNAL_URL = os.getenv("MARTIN_INTERNAL_URL", "http://martin:3000")
 
 
 @router.get("/{table_name}/{z}/{x}/{y}")
