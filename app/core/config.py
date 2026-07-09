@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 200
     allowed_origins: str = "http://localhost:5173"
+    public_url: str = "http://localhost:8000"
 
     @property
     def origins_list(self) -> list[str]:

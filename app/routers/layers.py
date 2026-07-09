@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from app.core.database import get_db
+from app.core.config import get_settings
+
+settings = get_settings()
 from app.core.security import get_current_user, require_admin, get_optional_user
 from app.models.layer import Layer
 from app.models.user import User
@@ -148,7 +151,7 @@ async def get_tile_url(layer_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Capa no encontrada")
 
     return {
-        "tile_url": f"http://localhost:8000/api/v1/tiles/{layer.postgis_table}/{{z}}/{{x}}/{{y}}",
+        "tile_url": f"{settings.public_url}/api/v1/tiles/{layer.postgis_table}/{{z}}/{{x}}/{{y}}",
         "layer_name": layer.name,
         "geometry_type": layer.geometry_type,
         "style": layer.style,
