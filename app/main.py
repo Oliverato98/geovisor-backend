@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
     # Startup: inicializar PostGIS y tablas
     await init_db()
     yield
-    # Shutdown: aquí se podrían cerrar conexiones adicionales
+    # Shutdown: cerrar el cliente HTTP del proxy de tiles
+    await tiles._cliente.aclose()
 
 
 app = FastAPI(
@@ -36,7 +37,9 @@ app = FastAPI(
 
 # ── Middlewares ───────────────────────────────────────────────────────────────
 
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Comprime JSON y GeoJSON. El umbral alto evita recomprimir los tiles MVT,
+# que Martin ya entrega comprimidos: hacerlo solo gastaría CPU (y dinero).
+app.add_middleware(GZipMiddleware, minimum_size=5000)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +62,15 @@ app.include_router(tiles.router, prefix="/api/v1")
 
 @app.get("/health", tags=["Sistema"])
 async def health():
-    return {"status": "ok", "service": "Geovisor Calarcá API", "version": "1.0.0"}
+    """Estado del servicio y configuración efectiva (sin datos sensibles)."""
+    return {
+        "status": "ok",
+        "service": "Geovisor Calarcá API",
+        "version": "1.0.0",
+        "public_url": settings.public_url,
+        "martin_internal_url": settings.martin_internal_url,
+        "allowed_origins": settings.origins_list,
+    }
 
 
 @app.get("/", tags=["Sistema"])

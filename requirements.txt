@@ -4,10 +4,19 @@ sqlalchemy==2.0.29
 alembic==1.13.1
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
+
+# --- Stack geoespacial: NO cambiar estas versiones sin probar ---
+# numpy debe quedar en 1.x porque geopandas 0.14.3, shapely 2.0.3 y fiona 1.9.6
+# fueron compilados contra numpy 1.x. Si pip instala numpy 2.x, geopandas falla
+# con "numpy.dtype size changed" al arrancar el contenedor en Railway.
+numpy==1.26.4
+pandas==2.2.3
 geopandas==0.14.3
 shapely==2.0.3
 fiona==1.9.6
 pyproj==3.6.1
+# ----------------------------------------------------------------
+
 python-multipart==0.0.9
 python-jose[cryptography]==3.3.0
 passlib==1.7.4
@@ -19,4 +28,3 @@ pydantic-settings==2.2.1
 python-dotenv==1.0.1
 httpx==0.27.0
 geoalchemy2==0.15.2
-pandas==2.2.3

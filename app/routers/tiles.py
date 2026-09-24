@@ -2,16 +2,24 @@
 routers/tiles.py — Proxy de tiles desde Martin con CORS habilitado.
 Esto resuelve el problema de CORS al servir los tiles a través del backend.
 """
-import os
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from app.core.config import get_settings
+
+settings = get_settings()
+
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
 
-# En Railway el host interno se arma con MARTIN_HOST inyectado vía variable de entorno.
-# En Docker local, el nombre del servicio es "martin" en el puerto 3000.
-MARTIN_INTERNAL_URL = os.getenv("MARTIN_INTERNAL_URL", "http://martin:3000")
+# URL interna de Martin. Se configura con MARTIN_INTERNAL_URL:
+#   Railway -> http://martin.railway.internal:3000
+#   Docker local -> http://martin:3000
+MARTIN_INTERNAL_URL = settings.martin_internal_url.rstrip("/")
+
+# Cliente HTTP reutilizado: abrir uno nuevo por tile satura el contenedor
+# cuando MapLibre pide decenas de tiles al mismo tiempo.
+_cliente = httpx.AsyncClient(timeout=30.0)
 
 
 @router.get("/{table_name}/{z}/{x}/{y}")
@@ -21,14 +29,15 @@ async def get_tile(table_name: str, z: int, x: int, y: int):
     """
     url = f"{MARTIN_INTERNAL_URL}/{table_name}/{z}/{x}/{y}"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.get(url)
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=502, detail=f"Error conectando a Martin: {e}")
+    try:
+        response = await _cliente.get(url)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Error conectando a Martin: {e}")
 
-    if response.status_code == 204:
-        # Tile vacío - devolver 204 sin contenido
+    # 204 = tile sin geometrías; 404 = Martin aún no registra la tabla.
+    # En ambos casos se responde vacío para no llenar la consola de MapLibre
+    # de errores rojos en zonas donde la capa simplemente no tiene datos.
+    if response.status_code in (204, 404):
         return Response(status_code=204)
 
     if response.status_code != 200:
@@ -44,3 +53,23 @@ async def get_tile(table_name: str, z: int, x: int, y: int):
             "Cache-Control": "public, max-age=3600",
         },
     )
+
+
+@router.get("/_debug/catalogo", tags=["Tiles"])
+async def catalogo_martin():
+    """
+    Diagnóstico: lista las tablas que Martin está publicando.
+    Sirve para confirmar desde producción que Martin ve las 21 capas.
+    """
+    try:
+        response = await _cliente.get(f"{MARTIN_INTERNAL_URL}/catalog")
+        return {
+            "martin_url": MARTIN_INTERNAL_URL,
+            "status": response.status_code,
+            "catalogo": response.json() if response.status_code == 200 else response.text,
+        }
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No hay conexión con Martin en {MARTIN_INTERNAL_URL}: {e}",
+        )
