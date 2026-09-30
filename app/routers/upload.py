@@ -7,12 +7,13 @@ import os
 import uuid
 from pathlib import Path
 
+from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.security import require_admin
+from app.core.security import get_optional_user
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.layer import Layer
@@ -60,7 +61,7 @@ async def upload_shapefile(
     name: str = Form(..., description="Nombre base de la capa"),
     description: str = Form("", description="Descripción opcional"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Sube un ZIP con uno o múltiples shapefiles.
@@ -92,7 +93,7 @@ async def upload_shapefile(
             name=layer_name,
             description=description or None,
             original_file_path=file_path,
-            owner_id=current_user.id,
+            owner_id=current_user.id if current_user else None,
             **geo_meta,
         )
         db.add(layer)
@@ -120,7 +121,7 @@ async def upload_geojson(
     name: str = Form(...),
     description: str = Form(""),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Sube un archivo GeoJSON."""
     ext = Path(file.filename).suffix.lower()
@@ -139,7 +140,7 @@ async def upload_geojson(
         name=name,
         description=description or None,
         original_file_path=file_path,
-        owner_id=current_user.id,
+        owner_id=current_user.id if current_user else None,
         **geo_meta,
     )
     db.add(layer)
@@ -154,7 +155,7 @@ async def upload_kml_kmz(
     name: str = Form(...),
     description: str = Form(""),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Sube un archivo KML o KMZ (Google Earth)."""
     ext = Path(file.filename).suffix.lower()
@@ -173,7 +174,7 @@ async def upload_kml_kmz(
         name=name,
         description=description or None,
         original_file_path=file_path,
-        owner_id=current_user.id,
+        owner_id=current_user.id if current_user else None,
         **geo_meta,
     )
     db.add(layer)

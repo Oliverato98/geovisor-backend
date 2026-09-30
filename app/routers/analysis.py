@@ -2,13 +2,14 @@
 routers/analysis.py — Endpoints de análisis espacial
 Todos requieren rol ADMIN.
 """
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.security import require_admin
+from app.core.security import get_optional_user
 from app.models.layer import Layer
 from app.models.user import User
 from app.schemas.schemas import BufferRequest, IntersectionRequest, DissolveRequest
@@ -29,7 +30,7 @@ async def _get_layer_or_404(layer_id: int, db: AsyncSession) -> Layer:
 async def buffer_analysis(
     payload: BufferRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Genera zonas de influencia (buffer) alrededor de las geometrías.
@@ -56,7 +57,7 @@ async def buffer_analysis(
 async def intersection_analysis(
     payload: IntersectionRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Intersección espacial entre dos capas.
@@ -82,7 +83,7 @@ async def intersection_analysis(
 async def dissolve_analysis(
     payload: DissolveRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Disuelve (agrupa y fusiona) geometrías por un atributo común.
