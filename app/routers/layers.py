@@ -1,5 +1,9 @@
 """
 routers/layers.py — Gestión de capas geoespaciales
+
+El geovisor es de acceso libre: cualquiera puede consultar, subir y editar capas.
+La única restricción es que las capas oficiales del municipio (`protegida=True`)
+no se pueden eliminar.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,7 +15,7 @@ from app.core.database import get_db
 from app.core.config import get_settings
 
 settings = get_settings()
-from app.core.security import get_current_user, require_admin, get_optional_user
+from app.core.security import get_optional_user
 from app.models.layer import Layer
 from app.models.user import User
 from app.schemas.schemas import LayerOut, LayerUpdate
@@ -29,15 +33,8 @@ async def list_layers(
     format: Optional[str] = Query(None, description="Filtrar por formato: shp, geojson, kml"),
     geom_type: Optional[str] = Query(None, description="Filtrar por tipo: Point, Polygon, LineString"),
 ):
-    """
-    Lista capas activas.
-    - Visitante/anónimo: solo capas públicas
-    - Admin: todas las capas
-    """
-    stmt = select(Layer).where(Layer.is_active == True)
-
-    if not current_user or current_user.role != "admin":
-        stmt = stmt.where(Layer.is_public == True)
+    """Lista las capas activas. Abierto a cualquier visitante."""
+    stmt = select(Layer).where(Layer.is_active == True, Layer.is_public == True)
 
     if format:
         stmt = stmt.where(Layer.source_format == format.lower())
@@ -61,8 +58,6 @@ async def get_layer(
 
     if not layer:
         raise HTTPException(status_code=404, detail="Capa no encontrada")
-    if not layer.is_public and (not current_user or current_user.role != "admin"):
-        raise HTTPException(status_code=403, detail="No tiene acceso a esta capa")
 
     return layer
 
@@ -72,15 +67,23 @@ async def update_layer(
     layer_id: int,
     payload: LayerUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """Actualiza nombre, descripción, estilo o visibilidad de una capa. Solo ADMIN."""
+    """
+    Actualiza nombre, descripción, estilo o visibilidad de una capa.
+    Cualquiera puede cambiar la simbología; el nombre de las capas oficiales
+    se conserva para que el municipio siga reconociéndolas.
+    """
     result = await db.execute(select(Layer).where(Layer.id == layer_id))
     layer = result.scalar_one_or_none()
     if not layer:
         raise HTTPException(status_code=404, detail="Capa no encontrada")
 
-    for field, value in payload.model_dump(exclude_none=True).items():
+    cambios = payload.model_dump(exclude_none=True)
+    if layer.protegida:
+        cambios.pop("name", None)
+
+    for field, value in cambios.items():
         setattr(layer, field, value)
 
     await db.commit()
@@ -92,23 +95,27 @@ async def update_layer(
 async def delete_layer(
     layer_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
-    Elimina una capa:
-    1. Borra la tabla de PostGIS
-    2. Elimina el registro de la BD
-    Solo ADMIN.
+    Elimina una capa: borra su tabla en PostGIS y su registro.
+    Las capas oficiales del municipio están protegidas y no se pueden eliminar.
     """
     result = await db.execute(select(Layer).where(Layer.id == layer_id))
     layer = result.scalar_one_or_none()
     if not layer:
         raise HTTPException(status_code=404, detail="Capa no encontrada")
 
-    # Eliminar tabla PostGIS
-    await delete_layer_table(layer.postgis_table, db)
+    if layer.protegida:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"«{layer.name}» es una capa oficial del municipio y no se puede eliminar. "
+                "Puedes ocultarla en el panel de capas o cambiar su simbología."
+            ),
+        )
 
-    # Eliminar registro
+    await delete_layer_table(layer.postgis_table, db)
     await db.execute(delete(Layer).where(Layer.id == layer_id))
     await db.commit()
 
@@ -120,17 +127,12 @@ async def export_layer_geojson(
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """
-    Exporta una capa completa como GeoJSON.
-    Útil para descargar o alimentar análisis externos.
-    """
+    """Exporta una capa completa como GeoJSON, para descargar o analizar aparte."""
     result = await db.execute(select(Layer).where(Layer.id == layer_id, Layer.is_active == True))
     layer = result.scalar_one_or_none()
 
     if not layer:
         raise HTTPException(status_code=404, detail="Capa no encontrada")
-    if not layer.is_public and (not current_user or current_user.role != "admin"):
-        raise HTTPException(status_code=403, detail="Sin acceso")
 
     geojson = await get_layer_as_geojson(layer.postgis_table, db, limit=limit)
     return JSONResponse(

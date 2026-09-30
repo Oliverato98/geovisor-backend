@@ -18,7 +18,8 @@ class Layer(Base):
     # Metadatos geoespaciales
     source_format: Mapped[str] = mapped_column(String(20))     # shp, geojson, kml, kmz
     geometry_type: Mapped[Optional[str]] = mapped_column(String(50))  # Point, Polygon, etc.
-    crs_original: Mapped[Optional[str]] = mapped_column(String(50))   # EPSG:4326, etc.
+    # El WKT completo de un CRS pasa de 400 caracteres: va como texto libre.
+    crs_original: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     feature_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Extensión geográfica (bounding box)
@@ -42,7 +43,12 @@ class Layer(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    # Capas oficiales del municipio: cualquiera las ve y las usa, nadie las borra.
+    # Las que suban los visitantes nacen sin protección y sí se pueden eliminar.
+    protegida: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # El geovisor es de acceso libre: una capa puede no tener dueño.
+    owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -53,4 +59,4 @@ class Layer(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    owner: Mapped["User"] = relationship("User", back_populates="layers")
+    owner: Mapped[Optional["User"]] = relationship("User", back_populates="layers")

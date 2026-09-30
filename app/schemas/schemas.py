@@ -71,7 +71,10 @@ class LayerOut(BaseModel):
     attributes: Optional[dict]
     is_public: bool
     is_active: bool
-    owner_id: int
+    # Capa oficial del municipio: se puede ver y simbolizar, pero no eliminar.
+    protegida: bool = False
+    # El geovisor es de acceso libre, así que una capa puede no tener dueño.
+    owner_id: Optional[int] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
